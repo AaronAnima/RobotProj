@@ -22,6 +22,7 @@ class Args:
 		parser = argparse.ArgumentParser()
 		parser.add_argument("--exp_name", default='exp_test', type=str)
 		parser.add_argument("--lr", default=0.0002, type=float)
+		parser.add_argument("--decay_rate", default=0.995, type=float)
 		parser.add_argument("--epoch_num", default=1000, type=int)
 		parser.add_argument("--batchsize", default=20, type=int)
 		parser.add_argument("--input_h", default=60, type=int)
@@ -50,7 +51,7 @@ def key_for_sort(item):
 	
 
 class DataLoader(object):
-	def __init__(self, data_path, device, batchsize, shape, order):
+	def __init__(self, data_path, device, batchsize, shape, order, img_c):
 		self.data_path = data_path
 		self.device = device
 		self.paired_data = []
@@ -58,30 +59,41 @@ class DataLoader(object):
 		self.batchsize = batchsize
 		self.img_h, self.img_w = shape
 		self.order = order
+		self.img_c = img_c
 		
 		# load label first
 		label_dict = {}
 		txt_file = open(data_path + '/steer_list.txt')
 		for line in txt_file.readlines():
 			line = line.strip()
-			content = line.split(' ')
+			content_ = line.split(' ')
+			content = []
+			for item in content_:
+				if item != '':
+					content.append(item)
 			label_ts = torch.FloatTensor([float(content[1])]).to(device).unsqueeze(0)
 			label_dict[content[0]] = label_ts
-		t_paired_data = []
+			
 		# then load image and make pair
-		for img_name in os.listdir(self.data_path + '/cw-color/'):
+		t_paired_data = []
+		for img_name in os.listdir(self.data_path + '/cw_color/'):
 			label = label_dict[img_name]
-			img = cv2.imread(os.path.join(self.data_path + '/cw-color/', img_name), cv2.IMREAD_GRAYSCALE)
+			mode = cv2.IMREAD_GRAYSCALE if self.img_c == 1 else cv2.IMREAD_COLOR
+			img = cv2.imread(os.path.join(self.data_path + '/cw_color/', img_name), mode)
 			# cv2.IMREAD_COLOR, cv2.IMREAD_GRAYSCALE
-			img = np.expand_dims(img, 2)
+			if self.img_c == 1:
+				img = np.expand_dims(img, 2)
 			img = pre_pro_img(img, self.img_h, self.img_w, self.device)
 			t_paired_data.append(Data(image=img, label=label, img_name=img_name))
 		
 		# process order
 		t_paired_data.sort(key=key_for_sort)
+		# for item in t_paired_data:
+		# 	print(item.img_name)
+		# input()
 		my_queue = deque(maxlen=self.order)
 		for idx in range(self.order):
-			my_queue.append(t_paired_data[idx].image)
+			my_queue.append(t_paired_data[0].image)
 		for idx, item in enumerate(t_paired_data):
 			my_queue.append(item.image)
 			cur_obs = torch.cat([img for img in my_queue], dim=1)
@@ -96,7 +108,7 @@ class DataLoader(object):
 			start_idx = idx * self.batchsize
 			end_idx = (idx + 1) * self.batchsize
 			if end_idx + 1 > len(self.paired_data):
-				end_idx = len(self.paired_data) - 1
+				end_idx = len(self.paired_data)
 			# assert data.image.shape == [1, c, h, w]
 			batch_img = torch.cat([data.image for data in self.paired_data[start_idx:end_idx]], dim=0)
 			# assert data.image.shape == [1, 1]

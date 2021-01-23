@@ -1,1 +1,1 @@
-tensorboard --logdir ./logs/test_exp/eval --port 10019 --reload_interval 1 --samples_per_plugin images=999
+tensorboard --logdir ./logs/test_multiorder/eval --port 10019 --reload_interval 1 --samples_per_plugin images=999
